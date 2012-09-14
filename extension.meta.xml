@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<extension id="multiple_section_event" status="experimental" xmlns="http://symphony-cms.com/schemas/extension/1.0">
+	<name>Multiple Section Event</name>
+	<description>An event that supports posting to multiple sections simultaneously.</description>
+	<authors>
+		<author>
+			<name github="klaftertief" symphony="klaftertief">Jonas Coch</name>
+			<website>http://klaftertief.de</website>
+			<email>jonas@klaftertief.de</email>
+		</author>
+	</authors>
+	<releases>
+		<release version="0.1.0" date="2012-09-13" min="2.3.1">
+			- Initial release
+		</release>
+	</releases>
+</extension>
