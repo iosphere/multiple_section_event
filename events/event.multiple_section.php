@@ -6,23 +6,29 @@
 
 	Class MultipleSectionEvent extends SectionEvent implements iEvent {
 
+		// String matching
+		const REGEX_PLACEHOLDER = '/(?<section>[a-z0-9-]+)(?:\[(?<position>\d+)\])?\[(?<field>([^\[:]+)(?::([^\[]*))*)\]/';
+
 		// This stores the section ID
 		private static $sectionID = null;
-	
+
+		// This stores the POSTed data
+		private static $post = array();
+
 		// Keep a record of all updated entries by section handle
 		private $updated_entries = array();
 		private $updated_counts  = array();
-	
+
 		// A record of created (deleteable) entries
 		private $created_entries = array();
-	
+
 		// Second pass associations
 		private $unresolved_links = array();
 		private static $temporary_unresolved_links = null;
-	
+
 		// Store the redirect string
 		private $redirect_url = null;
-	
+
 		public static function getName() {
 			return __('Multiple Section Event');
 		}
@@ -106,6 +112,82 @@
 			return is_numeric($concatenated_keys);
 		}
 
+		// Replace section[position][field] placeholders with their proper values
+		private function __processPlaceholders($handle, $value, $position = null, $sectionID, $sectionHandle, &$local_unresolved_links) {
+			// Reset the temporary container
+			self::$temporary_unresolved_links = array();
+
+			// If pcre.backtrack_limit is exceeded, preg_replace_callback returns NULL
+			if ($new_value = preg_replace_callback(self::REGEX_PLACEHOLDER, array($this, 'placeholderCallback'), $value)) {
+				if (isset($position)) {
+					self::$post[$sectionHandle][$position][$handle] = $new_value;
+				} else {
+					self::$post[$sectionHandle][$handle] = $new_value;
+				}
+			}
+
+			// Set up any unresolved links
+			foreach (self::$temporary_unresolved_links as $link) {
+				// Determine the target index
+				$target_index = (count($this->updated_entries[$link['target-handle']]) > 1 ? $this->updated_counts[$sectionHandle] : 0);
+
+				// Add to the section-level list of missed links
+				$local_unresolved_links[] = array(
+					'section-id' => $sectionID,
+					'target-handle' => $link['target-handle'],
+					'target-index' => $target_index,
+					'field-name' => $link['field-name'],
+					'replacement-key' => $link['replacement-key'],
+					'this-postkey' => $sectionHandle,
+					'this-key' => $handle
+				);
+			}
+		}
+
+		// Callback for the replacement above
+		public function placeholderCallback($matches) {
+			// Only sections defined in the event can be referenced
+			if (!in_array(SectionManager::fetchIDFromHandle($matches[1]), $this->eParamSECTIONS)) {
+				return $matches[0];
+			}
+
+			// var_dump($matches);
+			// system:id links
+			if ($matches['field'] == 'system:id') {
+				// There is a related system:id flying in the POST
+				if (empty($matches['position']) && isset(self::$post[$matches['section']]['system:id'])) {
+					return self::$post[$matches['section']]['system:id'];
+				}
+				else if (!empty($matches['position']) && isset(self::$post[$matches['section']][$matches['position']]['system:id'])) {
+					return self::$post[$matches['section']][$matches['position']]['system:id'];
+				}
+
+				// Set the replacement key to dynamically get the system:id later
+				// TODO Check how it's set
+				if (empty($matches['position'])) {
+					$replacement_key = '{@system-id:'.$matches['section'].'@}';
+				} else {
+					$replacement_key = '{@system-id:'.$matches['section'].':'.$matches['position'].'@}';
+				}
+
+				self::$temporary_unresolved_links[] =  array(
+					'target-handle' => $matches['section'],
+					'target-index' => $matches['position'],
+					'field-name' => $matches['field'],
+					'replacement-key' => $replacement_key
+				);
+
+				return $replacement_key;
+			}
+
+			// Other referenced fields
+			if (empty($matches['position'])) {
+				return self::$post[$matches['section']][$matches['field']];
+			} else {
+				return self::$post[$matches['section']][$matches['position']][$matches['field']];
+			}
+		}
+
 	/*-------------------------------------------------------------------------
 		Editor
 	-------------------------------------------------------------------------*/
@@ -155,7 +237,7 @@
 			if(!is_array($settings['filters'])) {
 				$settings['filters'] = array();
 			}
-			
+
 			return sprintf($template,
 				$params['rootelement'],
 				implode($settings[self::getClass()]['sections'], "', '"),
@@ -188,13 +270,17 @@
 				return $result;
 			}
 
-			$post = General::getPostData();
+			// TODO Disable email and other filters
+			// TODO Add filters at appropriate location
+
+			self::$post = General::getPostData();
 			$success = true;
 
-			// var_dump($post);die;
+			// var_dump(self::$post);
 
-			// Process POST for each section separately
 			require_once(TOOLKIT . '/class.sectionmanager.php');
+
+			// Process each section separately
 			foreach ($this->eParamSECTIONS as $id) {
 				$section = SectionManager::fetch($id);
 
@@ -202,9 +288,18 @@
 					$entry_id = $position = $fields = null;
 					self::$sectionID = $section->get('id');
 
+					// Create the list of updates
+					if (!isset($this->updated_entries[$section->get('handle')])) {
+						$this->updated_entries[$section->get('handle')] = array();
+						$this->updated_counts[$section->get('handle')] = 0;
+					}
+
+					// Stage unresolvable links locally
+					$local_unresolved_links = array();
+
 					// Get POST data for this section
-					if (self::isArraySequential($post[$section->get('handle')])) {
-						foreach ($post[$section->get('handle')] as $position => $fields) {
+					if (self::isArraySequential(self::$post[$section->get('handle')])) {
+						foreach (self::$post[$section->get('handle')] as $position => $fields) {
 							if (isset($fields['system:id']) && is_numeric($fields['system:id'])) {
 								$entry_id = $fields['system:id'];
 							}
@@ -214,10 +309,18 @@
 
 							$entry = new XMLElement('entry', null, array(
 								'position' => $position,
-								'index-key' => $position, // for EE and Form Controls compatibility
+								'index-key' => $position, // for EE / Form Controls compatibility
 								'section-id' => $section->get('id'),
 								'section-handle' => $section->get('handle')
 							));
+
+							foreach ($fields as $handle => $value) {
+								$this->__processPlaceholders($handle, $value, $position, $section->get('id'), $section->get('handle'), $local_unresolved_links);
+							}
+
+							// Update $fields with new values
+							// TODO I guess this is not the right way to do it
+							$fields = self::$post[$section->get('handle')][$position];
 
 							$ret = $this->__doit($fields, $entry, $position, $entry_id);
 
@@ -229,7 +332,7 @@
 						}
 					}
 					else {
-						$fields = $post[$section->get('handle')];
+						$fields = self::$post[$section->get('handle')];
 						$entry_id = null;
 
 						if (isset($fields['system:id']) && is_numeric($fields['system:id'])) {
@@ -241,6 +344,14 @@
 							'section-handle' => $section->get('handle')
 						));
 
+						foreach ($fields as $handle => $value) {
+							$this->__processPlaceholders($handle, $value, null, $section->get('id'), $section->get('handle'), $local_unresolved_links);
+						}
+
+						// Update $fields with new values
+						// TODO I guess this is not the right way to do it
+						$fields = self::$post[$section->get('handle')];
+
 						$success = $this->__doit($fields, $entry, null, $entry_id);
 
 						$result->appendChild($entry);
@@ -248,6 +359,8 @@
 
 				}
 			}
+
+			// var_dump(self::$post);
 
 			return $result;
 		}
