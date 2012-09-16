@@ -171,7 +171,8 @@
 				if (empty($matches['position'])) {
 					$replacement_key = '{@system-id:'.$matches['section'].'@}';
 				} else {
-					$replacement_key = '{@system-id:'.$matches['section'].':'.$matches['position'].'@}';
+					$replacement_key = '{@system-id:'.$matches['section'].'@}';
+					// $replacement_key = '{@system-id:'.$matches['section'].':'.$matches['position'].'@}';
 				}
 
 				self::$temporary_unresolved_links[] =  array(
@@ -425,6 +426,7 @@
 
 				if ($link['replacement-key']) {
 					// Replace the provided key with the system id
+					// TODO Support for numbered replacement keys
 					if ($link['target-index'] != '0') {
 						$fields[$link['this-key']] = preg_replace('/' . $link['replacement-key'] . '/', $value, self::$post[$link['this-postkey']][$link['target-index']][$link['this-key']]);
 					}
@@ -439,7 +441,7 @@
 
 				// Set up dummy 
 				$result = new XMLElement('temp-' . $link['this-postkey']);
-
+				// die;
 				if ($value) {
 					$this->__doit($fields, $result, null, $link['entry-id']);
 				}
