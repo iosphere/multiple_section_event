@@ -300,8 +300,8 @@
 					}
 
 					// Get POST data for this section
-					if (self::isArraySequential(self::$post[$section->get('handle')])) {
-						// TODO Merge with single entry POST
+					if (!empty(self::$post[$section->get('handle')]) && self::isArraySequential(self::$post[$section->get('handle')])) {
+						// TODO Merge with single entry POST code
 						foreach (self::$post[$section->get('handle')] as $position => $fields) {
 
 							// Stage unresolvable links locally
@@ -348,8 +348,8 @@
 							$result->appendChild($entry);
 						}
 					}
-					else {
-						// TODO Merge with multiple entry POST
+					else if (!empty(self::$post[$section->get('handle')])) {
+						// TODO Merge with multiple entry POST code
 
 						// Stage unresolvable links locally
 						$local_unresolved_links = array();
@@ -408,30 +408,31 @@
 			// TODO implement rollback
 			if ($this->rollback) return;
 
+			// var_dump($this->unresolved_links);
 			foreach ($this->unresolved_links as $link) {
-				// var_dump($link);
-				// var_dump(self::$post);
 				// Fake the getSource() method
 				self::$sectionID = $link['section-id'];
 
 				$fields = array();
-
-				// Set up the ID
-				$fields['id'] = $link['entry-id'];
 
 				// var_dump($this->updated_entries);
 				// And pop in the field data
 				$value = $this->updated_entries[$link['target-handle']][$link['target-index']];
 				// var_dump($value);
 
+				// var_dump(self::$post[$link['this-postkey']][$link['target-index']]);
+				// var_dump($link);
 				if ($link['replacement-key']) {
 					// Replace the provided key with the system id
-					// TODO Support for numbered replacement keys
+					// TODO Do actual replacements
+					// TODO Support multiple replacements
 					if ($link['target-index'] != '0') {
-						$fields[$link['this-key']] = preg_replace('/' . $link['replacement-key'] . '/', $value, self::$post[$link['this-postkey']][$link['target-index']][$link['this-key']]);
+						// $fields[$link['this-key']] = preg_replace('/' . $link['replacement-key'] . '/', $value, self::$post[$link['this-postkey']][$link['target-index']][$link['this-key']]);
+						$fields[$link['this-key']] = $value;
 					}
 					else {
-						$fields[$link['this-key']] = preg_replace('/' . $link['replacement-key'] . '/', $value, self::$post[$link['this-postkey']][$link['this-key']]);
+						// $fields[$link['this-key']] = preg_replace('/' . $link['replacement-key'] . '/', $value, self::$post[$link['this-postkey']][$link['this-key']]);
+						$fields[$link['this-key']] = $value;
 					}
 				}
 				else {
