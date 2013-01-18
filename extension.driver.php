@@ -1,6 +1,6 @@
 <?php
 
-	require_once EXTENSIONS . '/multiple_section_event/events/event.multiple_section.php';
+	require_once(EXTENSIONS . '/multiple_section_event/events/class.event.multiple_section.php');
 
 	Class Extension_Multiple_Section_Event extends Extension {
 
